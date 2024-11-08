@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Programs{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-sm-2"></div>
+    <div class="col-sm-8">
+        <h2>
+            Program List 
+            <button class="btn btn-primary float-right" data-toggle="modal" data-target="#addProgramModal">Add Program</button>
+        </h2>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            <div class="container">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+        
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th scope="col">No.</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">College Code</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for program in programs %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ program[0] }}</td>
+                    <td>{{ program[1] }}</td>
+                    <td>{{ program[2] }}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#editProgramModal{{ program[0] }}">Edit</button>
+                        <a href="/delete_program/{{ program[0] }}" onclick="return confirm('Are You Sure You Want to Delete This Program?')" class="btn btn-danger btn-sm">Delete</a>
+                    </td>
+                </tr>
+
+                <!-- Edit Program Modal -->
+<div id="editProgramModal{{ program[0] }}" class="modal fade" role="dialog">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Edit Program</h4>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('views.update_program', program_code=program[0]) }}" method="POST">
+                    <div class="form-group">
+                        <label>Program Code</label>
+                        <input type="text" name="code" class="form-control" value="{{ program[0] }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Program Name</label>
+                        <input type="text" name="name" class="form-control" value="{{ program[1] }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>College Code</label>
+                        <select name="college_code" class="form-control" required>
+                            <option value="">Select College</option>
+                            {% for college in colleges %}
+                                <option value="{{ college[0] }}" {% if college[0] == program[2] %}selected{% endif %}>{{ college[1] }} ({{ college[0] }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Program Modal -->
+<div id="addProgramModal" class="modal fade" role="dialog">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Add New Program</h4>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('views.add_program') }}" method="POST" id="addProgramForm">
+                    <div class="form-group">
+                        <label>Program Code</label>
+                        <input type="text" name="code" class="form-control" required placeholder="Enter Program Code">
+                    </div>
+                    <div class="form-group">
+                        <label>Program Name</label>
+                        <input type="text" name="name" class="form-control" required placeholder="Enter Program Name">
+                    </div>
+                    <div class="form-group">
+                        <label>College Code</label>
+                        <select name="college_code" class="form-control" required>
+                            <option value="">Select College</option>
+                            {% for college in colleges %}
+                                <option value="{{ college[0] }}">{{ college[1] }} ({{ college[0] }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="submit" form="addProgramForm" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

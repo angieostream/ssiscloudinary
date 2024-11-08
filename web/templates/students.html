@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Students{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-sm-2"></div>
+    <div class="col-sm-8">
+        <h2>
+            Student List 
+            <button class="btn btn-primary float-right" data-toggle="modal" data-target="#addStudentModal">Add Student</button>
+        </h2>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            <div class="container">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <button type="button" class="close" data-dismiss="alert" aria-label="close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+
+
+
+        <!-- Student Table -->
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th scope="col">No.</th>
+                    <th scope="col">Profile</th> <!-- Photo column before ID -->
+                    <th scope="col">ID</th>
+                    <th scope="col">First Name</th>
+                    <th scope="col">Last Name</th>
+                    <th scope="col">Course</th>
+                    <th scope="col">Year</th>
+                    <th scope="col">Gender</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if student %}
+                    {% for row in student %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            {% if row[0] %}
+                                <img id="student-image-{{ row[1] }}" src="{{ row[0] }}" alt="Student Image" class="profile-img">
+                            {% else %}
+                                <div class="profile-img no-photo">N/A</div>
+                            {% endif %}
+                        </td>                                               
+                        <td>{{ row[1] }}</td> 
+                        <td>{{ row[2] }}</td> 
+                        <td>{{ row[3] }}</td> 
+                        <td>{{ row[4] if row[4] else "" }}</td> 
+                        <td>{{ row[5] }}</td> 
+                        <td>{{ row[6] }}</td> 
+                        <td>
+                            <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#editStudentModal" 
+                            data-id="{{ row[1] }}" 
+                            data-firstname="{{ row[2] }}" 
+                            data-lastname="{{ row[3] }}" 
+                            data-course="{{ row[4] }}" 
+                            data-year="{{ row[5] }}" 
+                            data-gender="{{ row[6] }}" 
+                            data-image="{{ row[0] }}">Edit</button> 
+                        
+                            <a href="/delete/{{ row[1] }}" onclick="return confirm('Are You Sure You Want to Delete Student?')" class="btn btn-danger btn-sm">Delete</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+            </tbody>
+            
+        </table>
+        
+    </div>
+</div>
+
+<!-- Add Student Modal -->
+<div id="addStudentModal" class="modal fade" role="dialog">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Add New Student</h4>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('views.students') }}" method="POST" id="addStudentForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="image">Upload Image:</label>
+                        <input type="file" name="image" id="image" class="form-control">
+                    </div>                    
+                    <div class="form-group">
+                        <label>ID Number</label>
+                        <input type="text" name="id" class="form-control" required
+                        pattern="^\d{4}-\d{4}$" 
+                        placeholder="0000-0000">
+                    </div>
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" name="firstname" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" name="lastname" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Course Code</label>
+                        <select name="course" class="form-control" required>
+                            <option value="">Select Course</option>
+                            {% for program in programs %}
+                                <option value="{{ program[0] }}">{{ program[0] }} - {{ program[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Year</label>
+                        <select name="year" class="form-control" required>
+                            <option value="">Select Year</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <select name="gender" class="form-control" required>
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="submit" form="addStudentForm" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div id="editStudentModal" class="modal fade" role="dialog">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Edit Student</h4>
+            </div>
+            <div class="modal-body">
+                <form id="editStudentForm" method="POST" action="{{ url_for('views.update') }}" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label>ID Number</label>
+                        <input type="text" name="id" class="form-control" id="editId" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="editImage">Photo</label>
+                        <input type="file" name="photo" id="editImage" class="form-control" accept="image/*">
+                        <br>
+                        <img id="editStudentImage" src="" alt="Current Image" class="profile-img" style="max-width: 200px; display: none;">
+                        <input type="hidden" name="current_image_url" id="currentImageUrl">
+                    </div>
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" name="firstname" class="form-control" id="editFirstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" name="lastname" class="form-control" id="editLastName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Course Code</label>
+                        <select name="course" class="form-control" id="editCourse" required>
+                            <option value="">Select Course</option>
+                            {% for program in programs %}
+                                <option value="{{ program[0] }}">{{ program[0] }} - {{ program[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Year</label>
+                        <select name="year" class="form-control" id="editYear" required>
+                            <option value="">Select Year</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <select name="gender" class="form-control" id="editGender" required>
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="submit" form="editStudentForm" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+
+<script>
+$('#editStudentModal').on('show.bs.modal', function (event) {
+    var button = $(event.relatedTarget); 
+    var id = button.data('id');
+    var firstname = button.data('firstname');
+    var lastname = button.data('lastname');
+    var course = button.data('course');
+    var year = button.data('year');
+    var gender = button.data('gender');
+    var imageUrl = button.data('image'); 
+
+    // Update the modal's content
+    var modal = $(this);
+    modal.find('#editId').val(id);
+    modal.find('#editFirstName').val(firstname);
+    modal.find('#editLastName').val(lastname);
+    modal.find('#editCourse').val(course);
+    modal.find('#editYear').val(year);
+    modal.find('#editGender').val(gender);
+
+    // Update the image
+    if (imageUrl) {
+        modal.find('#editStudentImage').attr('src', imageUrl).show(); 
+        modal.find('#currentImageUrl').val(imageUrl); 
+    } else {
+        modal.find('#editStudentImage').hide(); 
+    }
+});
+
+    function toggleStudentTable() {
+        var studentTable = document.getElementById("studentTable");
+        if (studentTable.style.display === "none") {
+            studentTable.style.display = "block"; 
+        } else {
+            studentTable.style.display = "none"; 
+        }
+    }
+</script>
+
+
+{% endblock %}
