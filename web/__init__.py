@@ -24,7 +24,7 @@ def create_app():
     secure=True
 )
 
-    from .views import views
+    from .controller import views
     app.register_blueprint(views, url_prefix='/')
 
     return app
