@@ -5,24 +5,6 @@ import cloudinary.uploader
 views = Blueprint('views', __name__)
 mysql = MySQL()
 
-@views.route('/')
-def home():
-    students_list = get_students()  
-    programs = get_programs()           
-
-    per_page = 10  # Pagination limit
-    total_students = len(students_list)  
-    total_pages = (total_students + per_page - 1) // per_page  
-
-    return render_template(
-        'students.html',
-        student=students_list,
-        programs=programs,
-        current_page=1,  
-        total_pages=total_pages
-    )
-
-
 # Students routes
 def get_programs():
     cur = mysql.connection.cursor()
@@ -31,82 +13,66 @@ def get_programs():
     cur.close()
     return programs
 
-@views.route('/students', methods=['GET', 'POST'])
+@views.route("/", methods=['GET', 'POST'])
 def students():
-    course_filter = request.args.get('course', '')
-    year_filter = request.args.get('year', '')
-    gender_filter = request.args.get('gender', '')
+    if request.method == 'POST':
+        image = request.files.get('image')
+        id = request.form['id']
+        firstname = request.form['firstname']
+        lastname = request.form['lastname']
+        course = request.form['course']
+        year = request.form['year']
+        gender = request.form['gender']
 
+        image_url = None
+        if image:
+            upload_result = cloudinary.uploader.upload(image)
+            image_url = upload_result.get("secure_url")
+
+        if not (id and firstname and lastname and course and year and gender):
+            flash('All fields are required!', 'danger')
+            return redirect(url_for('views.students'))
+
+        if create_student(id, firstname, lastname, course, year, gender, image_url):
+            flash('Student added successfully!', 'success')
+            return redirect(url_for('views.students'))
+        else:
+            flash('ID number already exists. Please use a different ID number.', 'danger')
+            #return render_template('students.html', student=get_students_paginated(), programs=get_programs(), stay_open=True, current_page=1, total_pages=1)
+                
     # Pagination parameters
     page = request.args.get('page', 1, type=int)
     per_page = 10
     offset = (page - 1) * per_page
 
-    query = 'SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE 1=1'
-    filters = []
-
-    if course_filter:
-        query += " AND course = %s"
-        filters.append(course_filter)
-
-    if year_filter:
-        query += " AND year = %s"
-        filters.append(year_filter)
-
-    if gender_filter:
-        query += " AND gender = %s"
-        filters.append(gender_filter)
-
-    cur = mysql.connection.cursor()
-    cur.execute(query, tuple(filters))
-    total_students = cur.fetchall()
-
-    query += " LIMIT %s OFFSET %s"
-    filters.extend([per_page, offset])
-
-    # Get filtered students list
-    cur.execute(query, tuple(filters))
-    students_list = cur.fetchall()
-    cur.close()
-
-    total_pages = (len(total_students) + per_page - 1) // per_page
+    students_list, total_students = get_students_paginated(offset, per_page)
+    total_pages = (total_students + per_page - 1) // per_page
     programs = get_programs()
 
     return render_template(
         'students.html',
         student=students_list,
         programs=programs,
-        current_page=page,
-        total_pages=total_pages
+        current_page=page, 
+        total_pages=total_pages,
+        offset=offset,
+        per_page=per_page
     )
 
-
-def get_students_paginated(course_filter='', year_filter='', gender_filter='', offset=0, limit=10):
-    query = 'SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE 1=1'
-    filters = []
-
-    if course_filter:
-        query += " AND course = %s"
-        filters.append(course_filter)
-
-    if year_filter:
-        query += " AND year = %s"
-        filters.append(year_filter)
-
-    if gender_filter:
-        query += " AND gender = %s"
-        filters.append(gender_filter)
-
-    query += " LIMIT %s OFFSET %s"
-    filters.extend([limit, offset])
-
+def get_students_paginated(offset=0, limit=10):
     cur = mysql.connection.cursor()
-    cur.execute(query, tuple(filters))
+    cur.execute('SELECT COUNT(*) FROM students')
+    total_students = cur.fetchone()[0]
+
+    cur.execute(
+        'SELECT image_url, id, firstname, lastname, course, year, gender '
+        'FROM students LIMIT %s OFFSET %s',
+        (limit, offset)
+    )
     students = cur.fetchall()
     cur.close()
 
-    return students, len(students)
-
+    return students, total_students
 
 def create_student(id, firstname, lastname, course, year, gender, image_url):
     cur = mysql.connection.cursor()
@@ -221,10 +187,20 @@ def update_college(college_code):
         college_name = request.form['college_name']
         
         cur = mysql.connection.cursor()
-        cur.execute("UPDATE colleges SET name=%s WHERE code=%s", (college_name, college_code))  
+        
+        new_college_code = request.form['college_code']
+        cur.execute("SELECT * FROM colleges WHERE code = %s AND code != %s", (new_college_code, college_code))
+        existing_college = cur.fetchone()
+        
+        if existing_college:
+            flash("College code already exists. Please use a different code.", "danger")
+            return redirect(url_for('views.colleges'))
+
+        cur.execute("UPDATE colleges SET name=%s, code=%s WHERE code=%s", (college_name, new_college_code, college_code))
         mysql.connection.commit()
         flash("College Updated Successfully", "success")
         return redirect(url_for('views.colleges'))
+
 
 @views.route('/delete_college/<string:college_code>', methods=['GET'])
 def delete_college(college_code):
@@ -303,13 +279,21 @@ def update_program(program_code):
     if request.method == 'POST':
         name = request.form['name']
         college_code = request.form['college_code']
+        new_program_code = request.form['code'] 
 
         cur = mysql.connection.cursor()
-        cur.execute("UPDATE programs SET name=%s, college_code=%s WHERE code=%s", (name, college_code, program_code))
+
+        cur.execute("SELECT * FROM programs WHERE code = %s AND code != %s", (new_program_code, program_code))
+        existing_program = cur.fetchone()
+
+        if existing_program:
+            flash("Program code already exists. Please use a different code.", "danger")
+            return redirect(url_for('views.programs'))
+
+        cur.execute("UPDATE programs SET name=%s, college_code=%s, code=%s WHERE code=%s", (name, college_code, new_program_code, program_code))
         mysql.connection.commit()
         flash("Program updated successfully!", "success")
         return redirect(url_for('views.programs'))
-
 
 @views.route('/delete_program/<string:program_code>', methods=['GET'])
 def delete_program(program_code):
@@ -335,50 +319,33 @@ def add_update_program(college_code):
 def search():
     query = request.args.get('query', '').strip()
     category = request.args.get('search_type', '')
-    page = request.args.get('page', 1, type=int)
+    page = request.args.get('page', 1, type=int)  
     per_page = 10
     offset = (page - 1) * per_page
 
-    if not query and not category:
+    if not query or not category:
         return redirect(url_for('views.students', page=page))
 
     try:
         cur = mysql.connection.cursor()
-        if category == 'students':
-            # If the query is a single digit, search only by 'year' 
-            if query.isdigit() and len(query) == 1:  # Check if it's a single-digit query
-                cur.execute(
-                    "SELECT COUNT(*) FROM students WHERE year = %s",
-                    (query,)
-                )
-            else:  
-                cur.execute(
-                    "SELECT COUNT(*) FROM students WHERE "
-                    "firstname LIKE %s OR lastname LIKE %s OR course LIKE %s OR year LIKE %s OR gender = %s",
-                    tuple('%' + query + '%' for _ in range(4)) + (query,)
-                )
 
+        if category == 'students' and query.isdigit() and query in ['1', '2', '3', '4']:
+            # If query is a single digit year (1-4), search only by year
+            cur.execute(
+                "SELECT COUNT(*) FROM students WHERE year = %s", (query,)
+            )
             total_results = cur.fetchone()[0]
 
-            if query.isdigit() and len(query) == 1:
-                cur.execute(
-                    "SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE year = %s LIMIT %s OFFSET %s",
-                    (query, per_page, offset)
-                )
-            else:
-                cur.execute(
-                    "SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE "
-                    "firstname LIKE %s OR lastname LIKE %s OR course LIKE %s OR year LIKE %s OR gender = %s "
-                    "LIMIT %s OFFSET %s",
-                    tuple('%' + query + '%' for _ in range(4)) + (query, per_page, offset)
-                )
+            cur.execute(
+                "SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE year = %s LIMIT %s OFFSET %s",
+                (query, per_page, offset)
+            )
             results = cur.fetchall()
             cur.close()
 
             total_pages = (total_results + per_page - 1) // per_page
-            if not results and page == 1:
+            if not results:
                 flash(f"No Student Record found for '{query}'.", "danger")
-
 
             return render_template(
                 'students.html',
@@ -386,7 +353,39 @@ def search():
                 programs=get_programs(),
                 search_query=query,
                 current_page=page,
-                total_pages=total_pages
+                total_pages=total_pages,
+                per_page=per_page
+            )
+
+        elif category == 'students':
+            cur.execute(
+                "SELECT COUNT(*) FROM students WHERE "
+                "firstname LIKE %s OR lastname LIKE %s OR id LIKE %s OR course LIKE %s OR year LIKE %s OR gender = %s",  
+                tuple('%' + query + '%' for _ in range(5)) + (query,)  
+            )
+            total_results = cur.fetchone()[0]
+
+            cur.execute(
+                "SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE "
+                "firstname LIKE %s OR lastname LIKE %s OR id LIKE %s OR course LIKE %s OR year LIKE %s OR gender = %s"
+                "LIMIT %s OFFSET %s",  
+                tuple('%' + query + '%' for _ in range(5)) + (query, per_page, offset)
+            )
+            results = cur.fetchall()
+            cur.close()
+
+            total_pages = (total_results + per_page - 1) // per_page
+            if not results:
+                flash(f"No Student Record found for '{query}'.", "danger")
+
+            return render_template(
+                'students.html',
+                student=results,
+                programs=get_programs(),
+                search_query=query,
+                current_page=page,
+                total_pages=total_pages,
+                per_page=per_page
             )
 
         elif category == 'programs':
@@ -407,14 +406,16 @@ def search():
             cur.close()
 
             total_pages = (total_results + per_page - 1) // per_page
-            if not results and page == 1:
+            if not results:
                 flash(f"No Program Record found for '{query}'.", "danger")
+
             return render_template(
                 'programs.html',
                 programs=results,
                 search_query=query,
                 current_page=page,
-                total_pages=total_pages
+                total_pages=total_pages,
+                per_page=per_page
             )
 
         elif category == 'colleges':
@@ -435,19 +436,21 @@ def search():
             cur.close()
 
             total_pages = (total_results + per_page - 1) // per_page
-            if not results and page == 1:
+            if not results:
                 flash(f"No College Record found for '{query}'.", "danger")
+
             return render_template(
                 'colleges.html',
                 colleges=results,
                 search_query=query,
                 current_page=page,
-                total_pages=total_pages
+                total_pages=total_pages,
+                per_page=per_page
             )
 
     except Exception as e:
         flash(f"Database error: {str(e)}", "danger")
-        return redirect(url_for('views.students'))
+        return redirect(url_for('views.students', page=1))
 
     flash("No results found.", "info")
     return redirect(url_for('views.students'))

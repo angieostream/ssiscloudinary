@@ -88,7 +88,7 @@
                 {% if student %}
                     {% for row in student %}
                     <tr>
-                        <td>{{ loop.index }}</td>
+                        <td>{{ (current_page - 1) * per_page + loop.index }}</td>
                         <td>
                             {% if row[0] %}
                                 <img id="student-image-{{ row[1] }}" src="{{ row[0] }}" alt="Student Image" class="profile-img">
