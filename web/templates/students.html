@@ -4,54 +4,12 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-sm-2"></div>
-    <div class="col-sm-8">
+    <div class="col-sm-1"></div>
+    <div class="col-sm-10">
         <h2>
             Student List 
             <button class="btn btn-primary float-right" data-toggle="modal" data-target="#addStudentModal">Add Student</button>
         </h2>
-
-        <!-- Filter Form -->
-        <form action="{{ url_for('views.students') }}" method="GET" id="filterForm" class="mb-3">
-            <div class="form-row">
-                <!-- Filter by Course as first option, without label -->
-                <div class="form-group col-md-3">
-                    <select name="course" id="courseFilter" class="form-control">
-                        <option value="" {% if request.args.get('course') == '' %}selected{% endif %}>Filter by Course</option>
-                        {% for program in programs %}
-                            <option value="{{ program[0] }}" {% if request.args.get('course') == program[0] %}selected{% endif %}>{{ program[0] }} - {{ program[1] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Filter by Year -->
-                <div class="form-group col-md-3">
-                    <select name="year" id="yearFilter" class="form-control">
-                        <option value="">Select Year</option>
-                        <option value="1" {% if request.args.get('year') == '1' %}selected{% endif %}>1</option>
-                        <option value="2" {% if request.args.get('year') == '2' %}selected{% endif %}>2</option>
-                        <option value="3" {% if request.args.get('year') == '3' %}selected{% endif %}>3</option>
-                        <option value="4" {% if request.args.get('year') == '4' %}selected{% endif %}>4</option>
-                    </select>
-                </div>
-
-                <!-- Filter by Gender -->
-                <div class="form-group col-md-3">
-                    <select name="gender" id="genderFilter" class="form-control">
-                        <option value="">Select Gender</option>
-                        <option value="Male" {% if request.args.get('gender') == 'Male' %}selected{% endif %}>Male</option>
-                        <option value="Female" {% if request.args.get('gender') == 'Female' %}selected{% endif %}>Female</option>
-                        <option value="Other" {% if request.args.get('gender') == 'Other' %}selected{% endif %}>Other</option>
-                    </select>
-                </div>
-
-                <!-- Apply Filters Button -->
-                <div class="form-group col-md-3 d-flex align-items-end">
-                    <button class="btn btn-outline-primary my-2 my-sm-0" type="submit">Apply</button>
-
-                </div>
-            </div>
-        </form>
 
         <!-- Flash messages -->
         {% with messages = get_flashed_messages(with_categories=True) %}
@@ -99,7 +57,13 @@
                         <td>{{ row[1] }}</td> 
                         <td>{{ row[2] }}</td> 
                         <td>{{ row[3] }}</td> 
-                        <td>{{ row[4] if row[4] else "" }}</td> 
+                        <td>
+                        {{ row[4] or '' }}
+                        {% if row[7] %}
+                            ({{ row[7] }})
+                        {% endif %}
+                        </td>
+ 
                         <td>{{ row[5] }}</td> 
                         <td>{{ row[6] }}</td> 
                         <td>
@@ -181,9 +145,16 @@
             <div class="modal-body">
                 <form action="{{ url_for('views.students') }}" method="POST" id="addStudentForm" enctype="multipart/form-data">
                     <div class="form-group">
-                        <label for="image">Upload Image:</label>
-                        <input type="file" name="image" id="image" class="form-control">
-                    </div>                    
+                        <label>Upload Image:</label><br>
+                        <button type="button" id="upload_widget_opener" class="btn btn-primary">Upload Photo</button>
+                        <!-- Hidden input to store the uploaded image URL -->
+                        <input type="hidden" name="image_url" id="image_url" />
+                        <!-- Optionally show preview -->
+                        <div id="preview_container" style="margin-top:10px;">
+                            <img id="preview_image" src="" alt="No image uploaded" style="max-width: 150px; display:none;" />
+                        </div>
+                    </div>
+                                        
                     <div class="form-group">
                         <label>ID Number</label>
                         <input type="text" name="id" class="form-control" required
@@ -251,12 +222,15 @@
                         <input type="text" name="id" class="form-control" id="editId" readonly>
                     </div>
                     <div class="form-group">
-                        <label for="editImage">Photo</label>
-                        <input type="file" name="photo" id="editImage" class="form-control" accept="image/*">
+                        <label>Photo</label><br>
+                        <button type="button" id="upload_widget_opener_edit" class="btn btn-primary">Upload Photo</button>
+                        <input type="hidden" name="image_url" id="edit_image_url" />
+                        <input type="hidden" name="current_image_url" id="currentImageUrl" />
+
                         <br>
-                        <img id="editStudentImage" src="" alt="Current Image" class="profile-img" style="max-width: 200px; display: none;">
-                        <input type="hidden" name="current_image_url" id="currentImageUrl">
+                        <img id="editStudentImage" src="" alt="Current Image" class="profile-img" style="max-width: 200px; display: none; margin-top:10px;">
                     </div>
+
                     <div class="form-group">
                         <label>First Name</label>
                         <input type="text" name="firstname" class="form-control" id="editFirstName" required>
@@ -310,6 +284,8 @@
 <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+<script src="https://widget.cloudinary.com/v2.0/global/all.js" type="text/javascript"></script>
+
 
 <script>
 $('#editStudentModal').on('show.bs.modal', function (event) {
@@ -348,6 +324,52 @@ $('#editStudentModal').on('show.bs.modal', function (event) {
             studentTable.style.display = "none"; 
         }
     }
+</script>
+<script>
+  var myWidget = cloudinary.createUploadWidget({
+    cloudName: 'dygsi9hr5', // replace this with your actual cloud name
+    uploadPreset: 'ml_default', // your unsigned preset from Cloudinary dashboard
+    multiple: false,
+    maxFileSize: 2 * 1024 * 1024, // 2MB
+    clientAllowedFormats: ["png", "jpg", "jpeg"],
+  }, (error, result) => {
+    if (!error && result && result.event === "success") {
+      console.log('Upload successful: ', result.info);
+      // Store the secure_url in hidden input
+      document.getElementById('image_url').value = result.info.secure_url;
+      // Show preview
+      var preview = document.getElementById('preview_image');
+      preview.src = result.info.secure_url;
+      preview.style.display = 'block';
+    }
+  });
+
+  document.getElementById("upload_widget_opener").addEventListener("click", function(){
+    myWidget.open();
+  }, false);
+
+  var myWidgetEdit = cloudinary.createUploadWidget({
+    cloudName: 'dygsi9hr5', // replace this
+    uploadPreset: 'ml_default', // replace this
+    multiple: false,
+    maxFileSize: 2 * 1024 * 1024, // 2MB
+    clientAllowedFormats: ["png", "jpg", "jpeg"],
+}, (error, result) => {
+    if (!error && result && result.event === "success") {
+        console.log('Edit upload successful:', result.info);
+        // Set hidden input value
+        document.getElementById('edit_image_url').value = result.info.secure_url;
+        // Show preview image and update src
+        var preview = document.getElementById('editStudentImage');
+        preview.src = result.info.secure_url;
+        preview.style.display = 'block';
+    }
+});
+
+document.getElementById("upload_widget_opener_edit").addEventListener("click", function () {
+    myWidgetEdit.open();
+});
+
 </script>
 
 

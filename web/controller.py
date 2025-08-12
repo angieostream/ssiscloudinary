@@ -16,30 +16,39 @@ def get_programs():
 @views.route("/", methods=['GET', 'POST'])
 def students():
     if request.method == 'POST':
-        image = request.files.get('image')
         id = request.form['id']
         firstname = request.form['firstname']
         lastname = request.form['lastname']
         course = request.form['course']
         year = request.form['year']
         gender = request.form['gender']
+        image_url = request.form.get('image_url')  # <-- get URL from hidden input
 
-        image_url = None
-        if image:
-            upload_result = cloudinary.uploader.upload(image)
-            image_url = upload_result.get("secure_url")
-
+        # Basic validation
         if not (id and firstname and lastname and course and year and gender):
             flash('All fields are required!', 'danger')
             return redirect(url_for('views.students'))
+
+        # validate image_url is a valid URL or empty
+        if image_url:
+            from urllib.parse import urlparse
+            try:
+                result = urlparse(image_url)
+                if not all([result.scheme, result.netloc]):
+                    flash('Invalid image URL.', 'danger')
+                    return redirect(url_for('views.students'))
+            except Exception:
+                flash('Invalid image URL.', 'danger')
+                return redirect(url_for('views.students'))
+        else:
+            image_url = None 
 
         if create_student(id, firstname, lastname, course, year, gender, image_url):
             flash('Student added successfully!', 'success')
             return redirect(url_for('views.students'))
         else:
             flash('ID number already exists. Please use a different ID number.', 'danger')
-            #return render_template('students.html', student=get_students_paginated(), programs=get_programs(), stay_open=True, current_page=1, total_pages=1)
-                
+
     # Pagination parameters
     page = request.args.get('page', 1, type=int)
     per_page = 10
@@ -59,16 +68,21 @@ def students():
         per_page=per_page
     )
 
+
 def get_students_paginated(offset=0, limit=10):
     cur = mysql.connection.cursor()
     cur.execute('SELECT COUNT(*) FROM students')
     total_students = cur.fetchone()[0]
 
-    cur.execute(
-        'SELECT image_url, id, firstname, lastname, course, year, gender '
-        'FROM students LIMIT %s OFFSET %s',
-        (limit, offset)
-    )
+    cur.execute('''
+        SELECT 
+            s.image_url, s.id, s.firstname, s.lastname, s.course, s.year, s.gender,
+            COALESCE(c.name, '') AS college_name
+        FROM students s
+        LEFT JOIN programs p ON s.course = p.code
+        LEFT JOIN colleges c ON p.college_code = c.code
+        LIMIT %s OFFSET %s
+    ''', (limit, offset))
     students = cur.fetchall()
     cur.close()
 
@@ -116,8 +130,6 @@ def delete(id_data):
     flash("Student Record Has Been Deleted Successfully", "success")
     return redirect(url_for('views.students'))
 
-from cloudinary.uploader import upload as cloudinary_upload
-
 @views.route('/update', methods=['POST'])
 def update():
     student_id = request.form['id']
@@ -126,17 +138,8 @@ def update():
     course = request.form['course']
     year = request.form['year']
     gender = request.form['gender']
-    current_image_url = request.form['current_image_url']
-    
-    new_image_url = None
-    if 'photo' in request.files:
-        file = request.files['photo']
-        if file:
-            upload_result = cloudinary_upload(file)
-            new_image_url = upload_result['url']  #
-            
-    if not new_image_url:
-        new_image_url = current_image_url
+    current_image_url = request.form.get('current_image_url', None)
+    new_image_url = request.form.get('image_url') or current_image_url  # from hidden input or fallback
 
     cursor = mysql.connection.cursor()
     cursor.execute("""
@@ -144,19 +147,19 @@ def update():
         firstname = %s, lastname = %s, course = %s, year = %s, gender = %s, image_url = %s
         WHERE id = %s
     """, (firstname, lastname, course, year, gender, new_image_url, student_id))
-    
+
     mysql.connection.commit()
     cursor.close()
-    
+
     flash('Student updated successfully!', 'success')
-    return redirect(url_for('views.students'))  
-
-
+    return redirect(url_for('views.students'))
 
 # Colleges routes
 @views.route('/colleges', methods=['GET', 'POST'])
 def colleges():
     cur = mysql.connection.cursor()
+    
+    # Handle POST (add college)
     if request.method == 'POST':
         college_code = request.form['college_code']  
         college_name = request.form['college_name']
@@ -176,10 +179,30 @@ def colleges():
         mysql.connection.commit()
         flash("College Added Successfully", "success")
 
-    cur.execute("SELECT * FROM colleges")  
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    offset = (page - 1) * per_page
+
+    # Get total count for pagination
+    cur.execute("SELECT COUNT(*) FROM colleges")
+    total_colleges = cur.fetchone()[0]
+
+    # Get colleges with limit & offset
+    cur.execute("SELECT * FROM colleges LIMIT %s OFFSET %s", (per_page, offset))
     colleges_data = cur.fetchall()
+
+    total_pages = (total_colleges + per_page - 1) // per_page
+    
     cur.close()
-    return render_template('colleges.html', colleges=colleges_data)
+    return render_template(
+        'colleges.html',
+        colleges=colleges_data,
+        current_page=page,
+        total_pages=total_pages,
+        per_page=per_page
+    )
+
 
 @views.route('/update_college/<string:college_code>', methods=['POST'])
 def update_college(college_code):
@@ -214,14 +237,35 @@ def delete_college(college_code):
 @views.route('/programs', methods=['GET'])
 def programs():
     cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM programs")
+    
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    offset = (page - 1) * per_page
+
+    # Get total count for pagination
+    cur.execute("SELECT COUNT(*) FROM programs")
+    total_programs = cur.fetchone()[0]
+
+    # Get programs with limit & offset
+    cur.execute("SELECT * FROM programs LIMIT %s OFFSET %s", (per_page, offset))
     programs_data = cur.fetchall()
 
+    # Also get all colleges for dropdowns etc.
     cur.execute("SELECT code, name FROM colleges")
     colleges_data = cur.fetchall()
 
+    total_pages = (total_programs + per_page - 1) // per_page
+    
     cur.close()
-    return render_template('programs.html', programs=programs_data, colleges=colleges_data)
+    return render_template(
+        'programs.html',
+        programs=programs_data,
+        colleges=colleges_data,
+        current_page=page,
+        total_pages=total_pages,
+        per_page=per_page
+    )
 
 
 @views.route('/view_programs/<string:college_code>', methods=['GET'])
@@ -366,12 +410,19 @@ def search():
             total_results = cur.fetchone()[0]
 
             cur.execute(
-                "SELECT image_url, id, firstname, lastname, course, year, gender FROM students WHERE "
-                "firstname LIKE %s OR lastname LIKE %s OR id LIKE %s OR course LIKE %s OR year LIKE %s OR gender = %s"
-                "LIMIT %s OFFSET %s",  
+                """
+                SELECT s.image_url, s.id, s.firstname, s.lastname, s.course, s.year, s.gender,
+                    COALESCE(c.name, '') AS college_name
+                FROM students s
+                LEFT JOIN programs p ON s.course = p.code
+                LEFT JOIN colleges c ON p.college_code = c.code
+                WHERE s.firstname LIKE %s OR s.lastname LIKE %s OR s.id LIKE %s OR s.course LIKE %s OR s.year LIKE %s OR s.gender = %s
+                LIMIT %s OFFSET %s
+                """,
                 tuple('%' + query + '%' for _ in range(5)) + (query, per_page, offset)
             )
             results = cur.fetchall()
+
             cur.close()
 
             total_pages = (total_results + per_page - 1) // per_page
