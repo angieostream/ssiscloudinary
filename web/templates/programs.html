@@ -44,7 +44,7 @@
                     <td>{{ loop.index }}</td>
                     <td>{{ program[0] }}</td>
                     <td>{{ program[1] }}</td>
-                    <td>{{ program[2] }}</td>
+                    <td>{{ program[2] or ''}}</td>
                     <td>
                         <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#editProgramModal{{ program[0] }}">Edit</button>
                         <a href="/delete_program/{{ program[0] }}" onclick="return confirm('Are You Sure You Want to Delete This Program?')" class="btn btn-danger btn-sm">Delete</a>
